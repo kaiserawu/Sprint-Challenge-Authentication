@@ -1,6 +1,10 @@
 const axios = require('axios');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
-const { authenticate } = require('../auth/authenticate');
+const db = require('../database/dbConfig.js');
+
+const { authenticate, generateToken } = require('../auth/authenticate');
 
 module.exports = server => {
   server.post('/api/register', register);
@@ -8,12 +12,40 @@ module.exports = server => {
   server.get('/api/jokes', authenticate, getJokes);
 };
 
-function register(req, res) {
+async function register(req, res) {
   // implement user registration
+  try {
+    const user = req.body;
+    user.password = await bcrypt.hash(user.password, 14);
+    const returnedIdArr = await db.insert(user).into('users');
+    const dbEntry = await db.select().from('users').where({ id: returnedIdArr[0] }).first();
+
+    res.status(201).json(dbEntry);
+  } catch (err) {
+    res.status(500).json({ error: err });
+  }
 }
 
-function login(req, res) {
+async function login(req, res) {
   // implement user login
+  try {
+    const user = req.body;
+  
+    const dbUserData = await db.select().from('users').where({ username: user.username }).first();
+    console.log(dbUserData);
+
+    if (dbUserData && await bcrypt.compare(user.password, dbUserData.password)) {
+      console.log('Authenticated');
+      const token = generateToken(dbUserData);
+      console.log('Token is: ', token);
+  
+      res.json({ message: `Welcome, here's a token!`, token: token });
+    } else {
+      res.status(401).json({ message: 'You shall not pass!' });
+    }
+  } catch(err) {
+    res.status(500).json({ error: err });
+  }
 }
 
 function getJokes(req, res) {
